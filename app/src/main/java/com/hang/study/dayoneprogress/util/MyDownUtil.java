@@ -28,15 +28,19 @@ import java.net.UnknownHostException;
  */
 public class MyDownUtil {
     public Handler handler;
+    public int lastProcess;
     public static  boolean isDown=false;
     public static String url;
     public long totalLength;
     public Context context;
     public static String path= Environment.getExternalStorageDirectory().getAbsolutePath()+"/DayOneProgress";
     public File dir;
-    public MyDownUtil(Context context, Handler mHandler) {
+    public int blockCount=3;
+    public int totalCur=0;
+    public MyDownUtil(Context context, Handler mHandler, int lastProcess) {
         this.handler=mHandler;
         this.context=context;
+        this.lastProcess=lastProcess;
         dir=new File(path);
         if(!dir.exists()||dir.isFile()) {
             dir.mkdir();
@@ -59,7 +63,15 @@ public class MyDownUtil {
                 File file = new File(dir,getFileNameFromUrl());
                 RandomAccessFile raf = new RandomAccessFile(file, "rw");
                 raf.setLength(totalLength);
-                new downloadThread(0,totalLength-1).start();
+                long blockSize=totalLength/blockCount;
+                //new downloadThread(0, totalLength - 1).start();
+                for(int i=0;i<blockCount;i++) {
+                    if(i==blockCount-1) {
+                        new downloadThread(i,i*blockSize, totalLength-1).start();
+                    }else {
+                        new downloadThread(i,i*blockSize, (i+1)*blockSize - 1).start();
+                    }
+                }
 
             } else {
                 System.out.println("请求失败");
@@ -85,19 +97,19 @@ public class MyDownUtil {
 
     class downloadThread extends Thread {
         private long start, end, curLength;
-
-        public downloadThread(long start, long end) {
+        private int threadId;
+        public downloadThread(int threadId,long start, long end) {
+            this.threadId=threadId;
             this.start = start;
             this.end = end;
         }
-
 
         @Override
         public void run() {
             super.run();
             InputStream is=null;
             RandomAccessFile raf=null;
-            File file = new File(dir,getFileNameFromUrl() + "_position.txt");
+            File file = new File(dir,getFileNameFromUrl() + "_position"+threadId+".txt");
             try {
                 if (file.exists() && file.length() > 0) {
                     BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(file)));
@@ -117,6 +129,7 @@ public class MyDownUtil {
                 con.setRequestProperty("Range", "bytes=" + start + "-" + end);
                 con.connect();
                // long contentLength=con.getContentLength();
+                int code=con.getResponseCode();
                 if(con.getResponseCode()/100==2) {
                     File downloadFile=new File(dir,getFileNameFromUrl());
                     raf=new RandomAccessFile(downloadFile,"rw");
@@ -124,31 +137,39 @@ public class MyDownUtil {
                     byte[] buf=new byte[1024*1024];
                     is=con.getInputStream();
                     int len=0;
-                    File position=new File(dir,getFileNameFromUrl()+"_position.txt");
+                    File position=new File(dir,getFileNameFromUrl()+"_position"+threadId+".txt");
                     long time=System.currentTimeMillis();
                     while((len=is.read(buf))!=-1) {
                          if(!isDown) {
                              System.out.println("暂停下载");
                              Intent intent = new Intent();
                              intent.setAction(BActivity.STOP);
-                             intent.putExtra("cur", (int) (curLength *100/ totalLength ));
+                             intent.putExtra("cur", (int) (totalCur *100/ totalLength ));
                              context.sendBroadcast(intent);
                              return;
                          }
                          RandomAccessFile r=new RandomAccessFile(position,"rwd");
                          raf.write(buf,0,len);
                          this.curLength+=len;
+                         if(totalCur==0) {
+                             System.out.println("lastProcess===>"+lastProcess);
+                             if(lastProcess!=0)
+                                totalCur=(int)(lastProcess*totalLength/100);
+                             else
+                                totalCur+=this.curLength;
+                         }else
+                             totalCur+=len;
                         /* Message message=new Message();
                          Bundle data=new Bundle();
                          data.putInt("cur", (int) this.curLength);
                          data.putInt("total", (int) totalLength);
                          message.setData(data);
-                         handler.sendMessage(message);
+               1           handler.sendMessage(message);
                          */
                          if(System.currentTimeMillis()-time>=500) {
                              Intent intent = new Intent();
                              intent.setAction(BActivity.UPDATE);
-                             intent.putExtra("cur", (int) (curLength *100/ totalLength ));
+                             intent.putExtra("cur", (int) (totalCur *100/ totalLength ));
                              context.sendBroadcast(intent);
                              time=System.currentTimeMillis();
                          }
@@ -174,9 +195,11 @@ public class MyDownUtil {
                 }
 
             }
-            File position=new File(dir,getFileNameFromUrl()+"_position.txt");
-            if(position.exists()) {
-                position.delete();
+            for (int i=0;i<blockCount;i++) {
+                File position = new File(dir, getFileNameFromUrl() + "_position" + threadId + ".txt");
+                if (position.exists()) {
+                    position.delete();
+                }
             }
         }
     }

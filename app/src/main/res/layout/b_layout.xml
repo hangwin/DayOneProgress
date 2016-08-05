@@ -15,7 +15,7 @@
         android:textSize="20dp" />
     <EditText
         android:id="@+id/url_input"
-        android:text="https://dl.wandoujia.com/files/jupiter/latest/wandoujia-web_seo_google_homepage.apk"
+        android:text="http://10.0.2.2:8080/ResourceWeb/res/qq.dmg"
         android:layout_width="match_parent"
         android:layout_height="wrap_content" />
     <LinearLayout

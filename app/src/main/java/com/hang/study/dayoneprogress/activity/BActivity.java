@@ -1,30 +1,26 @@
 package com.hang.study.dayoneprogress.activity;
 
-import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.Notification;
 import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.os.Build;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Message;
 import android.text.TextUtils;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ProgressBar;
-import android.widget.RemoteViews;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import com.hang.study.dayoneprogress.R;
+import com.hang.study.dayoneprogress.service.DownloadService;
 import com.hang.study.dayoneprogress.util.MyDownUtil;
 import com.hang.study.dayoneprogress.util.SPUtil;
+import com.hang.study.dayoneprogress.util.ServiceUtil;
 
 /**
  * Created by hang on 16/8/3.
@@ -36,7 +32,7 @@ public class BActivity extends Activity implements View.OnClickListener {
     public TextView showProgress;
     public myReceiver receiver;
     public Button stop;
-    public MyDownUtil downUtil;
+    public int lastProcess=0;
     public NotificationManager notify;
     public Notification notification;
     public static final String UPDATE = "PROGRESS_UPDATE";
@@ -45,7 +41,7 @@ public class BActivity extends Activity implements View.OnClickListener {
     public static final int UNKOWNHOST=2;
     public static final int SHOWNOTIFY=3;
 
-    public Handler mHandler=new Handler() {
+   /* public Handler mHandler=new Handler() {
           @Override
           public void handleMessage(Message msg) {
               super.handleMessage(msg);
@@ -64,7 +60,7 @@ public class BActivity extends Activity implements View.OnClickListener {
               }
 
           }
-      };
+      }; */
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -74,7 +70,7 @@ public class BActivity extends Activity implements View.OnClickListener {
         url_input = (EditText) findViewById(R.id.url_input);
         progressBar = (ProgressBar) findViewById(R.id.pb);
         progressBar.setMax(100);
-        downUtil = new MyDownUtil(this,mHandler);
+       // downUtil = new MyDownUtil(this,mHandler);
         showProgress = (TextView) findViewById(R.id.show_progress);
         start.setOnClickListener(this);
         stop.setOnClickListener(this);
@@ -84,30 +80,6 @@ public class BActivity extends Activity implements View.OnClickListener {
 
     }
 
-    //初始化通知
-    @TargetApi(Build.VERSION_CODES.JELLY_BEAN)
-    private void initNotify() {
-        long when = System.currentTimeMillis();
-        Notification.Builder builder = new Notification.Builder(this);
-        builder.setTicker("下载中");
-        builder.setSmallIcon(R.mipmap.ic_launcher);
-        builder.setWhen(when);
-        builder.setAutoCancel(true);
-        RemoteViews notify = new RemoteViews(getPackageName(), R.layout.notify_layout);
-        notify.setTextViewText(R.id.notification_update_progress_text, "0%");
-        builder.setContent(notify);
-        Intent intent = new Intent(this, BActivity.class);
-        PendingIntent pendingIntent = PendingIntent.getActivities(this, 0, new Intent[]{intent}, PendingIntent.FLAG_UPDATE_CURRENT);
-        builder.setContentIntent(pendingIntent);
-        notification = builder.build();
-    }
-
-    //更新通知栏进度条
-    public void updateNotifyProgress(int progress) {
-        notification.contentView.setProgressBar(R.id.notification_update_progress_bar, 100, progress, false);
-        notification.contentView.setTextViewText(R.id.notification_update_progress_text, progress + "%");
-        notify.notify(0, notification);
-    }
 
     @Override
     protected void onPause() {
@@ -116,7 +88,7 @@ public class BActivity extends Activity implements View.OnClickListener {
             unregisterReceiver(receiver);
             receiver=null;
         }
-        MyDownUtil.isDown = false;
+        //MyDownUtil.isDown = false;
     }
 
     @Override
@@ -155,7 +127,7 @@ public class BActivity extends Activity implements View.OnClickListener {
     }
 
     //开始下载
-    private void startDownload() {
+   /* private void startDownload() {
         MyDownUtil.isDown = true;
         progressBar.setVisibility(View.VISIBLE);
         final String url = url_input.getText().toString();
@@ -168,14 +140,34 @@ public class BActivity extends Activity implements View.OnClickListener {
             }).start();
         } else
             Toast.makeText(this, "下载地址不能为空", Toast.LENGTH_SHORT).show();
+    }*/
+
+    private void startDownload() {
+        MyDownUtil.isDown = true;
+        progressBar.setVisibility(View.VISIBLE);
+        final String url = url_input.getText().toString();
+        if (!TextUtils.isEmpty(url)) {
+            Intent serviceIntent=new Intent(this, DownloadService.class);
+            lastProcess=SPUtil.getInt(this,"curprogress");
+            if (lastProcess!=-1)
+            serviceIntent.putExtra("lastProcess",lastProcess);
+            serviceIntent.putExtra("url",url);
+            startService(serviceIntent);
+        } else
+            Toast.makeText(this, "下载地址不能为空", Toast.LENGTH_SHORT).show();
     }
 
     private void stopDownload() {
-        MyDownUtil.isDown = false;
+       // MyDownUtil.isDown = false;
+        if(ServiceUtil.isServiceAlive(this,"com.hang.study.dayoneprogress.service.DownloadService")) {
+            Intent serviceIntent=new Intent(this, DownloadService.class);
+            stopService(serviceIntent);
+        }
+        Toast.makeText(this, "已停止", Toast.LENGTH_SHORT).show();
     }
 
 
-    //接收广播更新进度条
+
     class myReceiver extends BroadcastReceiver {
 
         @Override
@@ -186,7 +178,7 @@ public class BActivity extends Activity implements View.OnClickListener {
                 if (cur != -1) {
                     progressBar.setProgress(cur);
                     showProgress.setVisibility(View.VISIBLE);
-                    updateNotifyProgress(cur);
+                    //updateNotifyProgress(cur);
                     SPUtil.setInt(BActivity.this, "curprogress", cur);
                     if (cur == 100) {
                         showProgress.setText("下载完成");
