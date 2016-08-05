@@ -167,7 +167,7 @@ public class BActivity extends Activity implements View.OnClickListener {
     }
 
 
-
+    //接收广播更新进度
     class myReceiver extends BroadcastReceiver {
 
         @Override
